@@ -5,6 +5,7 @@ package com.gooddata.rundeck.plugin.orchestrator;
 
 import com.dtolabs.rundeck.core.common.INodeEntry;
 import com.dtolabs.rundeck.core.execution.workflow.StepExecutionContext;
+import com.dtolabs.rundeck.core.execution.workflow.steps.node.NodeStepResult;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.Arrays.asList;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 import static org.mockito.Mockito.when;
@@ -35,6 +37,9 @@ public class JdbcOrchestratorTest {
     @Mock
     private INodeEntry proxy3;
 
+    @Mock
+    private NodeStepResult nodeStepResult;
+
     private JdbcOrchestrator orchestrator;
 
     @Before
@@ -51,14 +56,41 @@ public class JdbcOrchestratorTest {
     }
 
     @Test
-    public void orchestrator() {
-        final List<INodeEntry> nodes = new ArrayList<INodeEntry>();
+    public void proxiesAndBalancers() {
+        assertThat(orchestrator.balancers.size(), is(2));
+        assertThat(orchestrator.proxies.size(), is(3));
+    }
+
+    @Test
+    public void orchestrator_firstGroup() {
+        final List<INodeEntry> nodes = getNextGroup();
+
+        assertThat(nodes.size(), is(3));
+        assertThat(orchestrator.isComplete(), is(false));
+        assertThat(orchestrator.nextNode(), is(nullValue()));
+    }
+
+    @Test
+    public void orchestrator_secondGroup() {
+        returnNodes(getNextGroup());
+
+        final List<INodeEntry> nodes = getNextGroup();
+
+        assertThat(nodes.size(), is(2));
+        assertThat(orchestrator.isComplete(), is(true));
+    }
+
+    private List<INodeEntry> getNextGroup() {
+        final List<INodeEntry> nodes = new ArrayList<>();
 
         INodeEntry node;
         while ((node = orchestrator.nextNode()) != null) {
             nodes.add(node);
         }
+        return nodes;
+    }
 
-        assertThat(nodes.size(), is(3));
+    private void returnNodes(final List<INodeEntry> nodes) {
+        nodes.forEach(it -> orchestrator.returnNode(it, false, nodeStepResult));
     }
 }
