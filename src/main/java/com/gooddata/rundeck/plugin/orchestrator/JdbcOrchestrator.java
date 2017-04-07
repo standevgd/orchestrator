@@ -10,67 +10,48 @@ import com.dtolabs.rundeck.plugins.orchestrator.Orchestrator;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import static java.util.stream.Collectors.toList;
 
 public class JdbcOrchestrator implements Orchestrator {
     public static final String SERVICE_PROVIDER_TYPE = "jdbc-orchestrator";
-    protected List<INodeEntry> balancers = new ArrayList<>();
-    protected List<INodeEntry> proxies = new ArrayList<>();
-    private List<INodeEntry> group = new ArrayList<>();
-    private List<INodeEntry> inProgress = new ArrayList<>();
+    private final List<List<INodeEntry>> groups;
+    private final int totalGroups;
+    private int currentGroupIndex = 0;
+    private Iterator<INodeEntry> currentGroupIterator;
+    private List<INodeEntry> nodesBeingProcessed;
 
     public JdbcOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes) {
-        this.balancers = nodes.stream()
-                .filter(this::isBalancer)
-                .collect(toList());
-
-        this.proxies = nodes.stream()
-                .filter(this::isProxy)
-                .collect(toList());
+        groups = getNodeGroups(nodes);
+        totalGroups = groups.size();
+        currentGroupIterator = groups.get(0).iterator();
+        nodesBeingProcessed = new ArrayList<>();
     }
 
     public INodeEntry nextNode() {
-        if (!hasBalancer()) {
-            if (balancers.isEmpty()) {
+        if (!currentGroupIterator.hasNext()) {
+            if (nodesBeingProcessed.isEmpty() && !isComplete()) {
+                currentGroupIterator = groups.get(++currentGroupIndex).iterator();
+                return currentGroupIterator.next();
+            } else {
                 return null;
             }
-
-            final INodeEntry balancer = balancers.remove(0);
-            group.add(balancer);
-            inProgress.add(balancer);
-            return balancer;
+        } else {
+            final INodeEntry nextNode = currentGroupIterator.next();
+            nodesBeingProcessed.add(nextNode);
+            return nextNode;
         }
-
-        if (proxies.isEmpty() || hasEnoughProxies()) {
-            return null;
-        }
-
-        final INodeEntry proxy = proxies.remove(0);
-        group.add(proxy);
-        inProgress.add(proxy);
-
-        return proxy;
     }
 
-    private boolean hasEnoughProxies() {
-        return group.stream().filter(this::isProxy).count() >= Math.min(proxies.size(), 2);
-    }
-
-    private boolean hasBalancer() {
-        return group.stream().anyMatch(this::isBalancer);
-    }
-
-    public void returnNode(final INodeEntry node, final boolean b, final NodeStepResult nodeStepResult) {
-        inProgress.remove(node);
-        if (inProgress.isEmpty() && hasBalancer() && hasEnoughProxies()) {
-            group.clear();
-        }
+    public void returnNode(final INodeEntry node, final boolean success, final NodeStepResult nodeStepResult) {
+        nodesBeingProcessed.remove(node);
     }
 
     public boolean isComplete() {
-        return balancers.isEmpty() && proxies.isEmpty();
+        return currentGroupIndex +1 >= totalGroups && !currentGroupIterator.hasNext();
     }
 
     private boolean isBalancer(final INodeEntry node) {
@@ -79,5 +60,47 @@ public class JdbcOrchestrator implements Orchestrator {
 
     private boolean isProxy(final INodeEntry node) {
         return !isBalancer(node);
+    }
+
+    private List<List<INodeEntry>> getNodeGroups(final Collection<INodeEntry> nodes) {
+        final List<INodeEntry> balancers = nodes.stream()
+                .filter(this::isBalancer)
+                .collect(toList());
+
+        final List<INodeEntry> proxies = nodes.stream()
+                .filter(this::isProxy)
+                .collect(toList());
+
+        final List<List<INodeEntry>> groups = new ArrayList<>();
+        final List<Integer> backendGroupIndexes = computeBackendGroupIndexes(balancers.size(), proxies.size());
+
+        for (int i = 0; i < balancers.size(); i++) {
+            final List<INodeEntry> group = new ArrayList<>(Collections.singletonList(balancers.get(i)));
+            group.addAll(proxies.subList(backendGroupIndexes.get(i), backendGroupIndexes.get(i+1)));
+            groups.add(group);
+        }
+
+        return groups;
+    }
+
+    static List<Integer> computeBackendGroupIndexes(final int frontendCount, final int backendCount) {
+        if (backendCount == 1 || frontendCount == 1 || frontendCount > backendCount) {
+            throw new RuntimeException("Cannot perform a zero downtime release with the given number of nodes");
+        }
+
+        final int groupSize = backendCount / frontendCount;
+        final int remainder = backendCount % frontendCount;
+        final List<Integer> indexes = new ArrayList<Integer>() {{
+            add(0);
+        }};
+
+        for (int i = 1; i <= frontendCount; i++) {
+            if (remainder > i-1) {
+                indexes.add(Math.min(indexes.get(i-1) + groupSize + 1, backendCount));
+            } else {
+                indexes.add(Math.min(indexes.get(i-1) + groupSize, backendCount));
+            }
+        }
+        return indexes;
     }
 }

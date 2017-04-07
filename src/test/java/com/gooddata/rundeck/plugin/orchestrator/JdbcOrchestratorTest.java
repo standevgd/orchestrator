@@ -15,9 +15,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.Arrays.asList;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.when;
 
 public class JdbcOrchestratorTest {
@@ -52,32 +54,38 @@ public class JdbcOrchestratorTest {
         when(proxy2.getNodename()).thenReturn("proxy2");
         when(proxy3.getNodename()).thenReturn("proxy3");
 
-        orchestrator = new JdbcOrchestrator(context, asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3));
-    }
+        final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3));
 
-    @Test
-    public void proxiesAndBalancers() {
-        assertThat(orchestrator.balancers.size(), is(2));
-        assertThat(orchestrator.proxies.size(), is(3));
+        orchestrator = new JdbcOrchestrator(context, nodes);
     }
 
     @Test
     public void orchestrator_firstGroup() {
         final List<INodeEntry> nodes = getNextGroup();
+        processAllNodes(nodes);
 
         assertThat(nodes.size(), is(3));
         assertThat(orchestrator.isComplete(), is(false));
-        assertThat(orchestrator.nextNode(), is(nullValue()));
+        assertThat(orchestrator.nextNode(), is(jbalancer2));
     }
+
 
     @Test
     public void orchestrator_secondGroup() {
-        returnNodes(getNextGroup());
+        processAllNodes(getNextGroup());
 
         final List<INodeEntry> nodes = getNextGroup();
 
         assertThat(nodes.size(), is(2));
+        assertThat(orchestrator.nextNode(), is(nullValue()));
         assertThat(orchestrator.isComplete(), is(true));
+    }
+
+    @Test
+    public void computeBackendGroups() {
+        final List<Integer> indexes = JdbcOrchestrator.computeBackendGroupIndexes(3, 10);
+
+        assertThat(indexes, equalTo(asList(0, 4, 7, 10)));
     }
 
     private List<INodeEntry> getNextGroup() {
@@ -90,7 +98,9 @@ public class JdbcOrchestratorTest {
         return nodes;
     }
 
-    private void returnNodes(final List<INodeEntry> nodes) {
-        nodes.forEach(it -> orchestrator.returnNode(it, false, nodeStepResult));
+    private void processAllNodes(List<INodeEntry> nodes) {
+        for (final INodeEntry node : nodes) {
+            orchestrator.returnNode(node, true, nodeStepResult);
+        }
     }
 }
