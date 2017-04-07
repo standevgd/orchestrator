@@ -25,7 +25,7 @@ public class JdbcOrchestrator implements Orchestrator {
     private List<INodeEntry> nodesBeingProcessed;
 
     public JdbcOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes) {
-        groups = getNodeGroups(nodes);
+        groups = groupNodes(nodes);
         totalGroups = groups.size();
         currentGroupIterator = groups.get(0).iterator();
         nodesBeingProcessed = new ArrayList<>();
@@ -54,21 +54,21 @@ public class JdbcOrchestrator implements Orchestrator {
         return currentGroupIndex +1 >= totalGroups && !currentGroupIterator.hasNext();
     }
 
-    private boolean isBalancer(final INodeEntry node) {
+    private static boolean isBalancer(final INodeEntry node) {
         return node.getNodename().contains("balancer");
     }
 
-    private boolean isProxy(final INodeEntry node) {
+    private static boolean isProxy(final INodeEntry node) {
         return !isBalancer(node);
     }
 
-    private List<List<INodeEntry>> getNodeGroups(final Collection<INodeEntry> nodes) {
+    static List<List<INodeEntry>> groupNodes(final Collection<INodeEntry> nodes) {
         final List<INodeEntry> balancers = nodes.stream()
-                .filter(this::isBalancer)
+                .filter(JdbcOrchestrator::isBalancer)
                 .collect(toList());
 
         final List<INodeEntry> proxies = nodes.stream()
-                .filter(this::isProxy)
+                .filter(JdbcOrchestrator::isProxy)
                 .collect(toList());
 
         final List<List<INodeEntry>> groups = new ArrayList<>();
