@@ -24,6 +24,9 @@ public class EqualSplitOrchestratorPlugin implements OrchestratorPlugin {
             defaultValue = "balancer", required = true)
     String primaryNodeType;
 
+    public EqualSplitOrchestratorPlugin() {
+    }
+
     @Override
     public Orchestrator createOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes) {
         return new EqualSplitOrchestrator(context, nodes, primaryNodeType);
