@@ -4,7 +4,6 @@
 package com.gooddata.rundeck.plugin.orchestrator;
 
 import com.dtolabs.rundeck.core.common.INodeEntry;
-import com.dtolabs.rundeck.core.execution.workflow.StepExecutionContext;
 import com.dtolabs.rundeck.core.execution.workflow.steps.node.NodeStepResult;
 import org.junit.Before;
 import org.junit.Test;
@@ -22,10 +21,7 @@ import static org.hamcrest.core.Is.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class JdbcOrchestratorTest {
-
-    @Mock
-    private StepExecutionContext context;
+public class EqualSplitOrchestratorTest {
 
     @Mock
     private INodeEntry jbalancer1;
@@ -42,7 +38,7 @@ public class JdbcOrchestratorTest {
     @Mock
     private NodeStepResult nodeStepResult;
 
-    private JdbcOrchestrator orchestrator;
+    private EqualSplitOrchestrator orchestrator;
 
     @Before
     public void setUp() {
@@ -57,7 +53,7 @@ public class JdbcOrchestratorTest {
 
         final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3));
 
-        orchestrator = new JdbcOrchestrator(context, nodes);
+        orchestrator = new EqualSplitOrchestrator(null, nodes, "balancer");
     }
 
     @Test
@@ -103,7 +99,7 @@ public class JdbcOrchestratorTest {
 
         final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3, jbalancer3,
                 proxy4, proxy5, proxy6, proxy7, proxy8, proxy9, proxy10));
-        final List<List<INodeEntry>> nodeGroups = JdbcOrchestrator.groupNodes(nodes);
+        final List<List<INodeEntry>> nodeGroups = orchestrator.groupNodes(nodes);
 
         assertThat(nodeGroups.size(), is(3));
         final List<INodeEntry> firstGroup = nodeGroups.get(0);
@@ -121,21 +117,21 @@ public class JdbcOrchestratorTest {
 
     @Test
     public void computeBackendGroupIndexes3Balancers9Proxies() {
-        final List<Integer> indexes = JdbcOrchestrator.computeBackendGroupIndexes(3, 9);
+        final List<Integer> indexes = EqualSplitOrchestrator.computeSecondaryNodeSplitting(3, 9);
 
         assertThat(indexes, equalTo(asList(0, 3, 6, 9)));
     }
 
     @Test
     public void computeBackendGroupIndexes3Balancers10Proxies() {
-        final List<Integer> indexes = JdbcOrchestrator.computeBackendGroupIndexes(3, 10);
+        final List<Integer> indexes = EqualSplitOrchestrator.computeSecondaryNodeSplitting(3, 10);
 
         assertThat(indexes, equalTo(asList(0, 4, 7, 10)));
     }
 
     @Test
     public void computeBackendGroupIndexes3Balancers11Proxies() {
-        final List<Integer> indexes = JdbcOrchestrator.computeBackendGroupIndexes(3, 11);
+        final List<Integer> indexes = EqualSplitOrchestrator.computeSecondaryNodeSplitting(3, 11);
 
         assertThat(indexes, equalTo(asList(0, 4, 8, 11)));
     }

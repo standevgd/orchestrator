@@ -14,21 +14,35 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import static java.lang.Math.min;
 import static java.util.stream.Collectors.toList;
 
-public class JdbcOrchestrator implements Orchestrator {
-    public static final String SERVICE_PROVIDER_TYPE = "jdbc-orchestrator";
+/**
+ * Splits the backends and frontends to even groups with one frontend and n backends per group
+ */
+public class EqualSplitOrchestrator implements Orchestrator {
     private final List<List<INodeEntry>> groups;
+    private final String primaryNodeType;
     private final int totalGroups;
     private int currentGroupIndex = 0;
     private Iterator<INodeEntry> currentGroupIterator;
     private List<INodeEntry> nodesBeingProcessed;
 
-    public JdbcOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes) {
+    public EqualSplitOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes,
+                                  final String primaryNodeType) {
+        this.primaryNodeType = primaryNodeType;
         groups = groupNodes(nodes);
         totalGroups = groups.size();
         currentGroupIterator = groups.get(0).iterator();
         nodesBeingProcessed = new ArrayList<>();
+
+        if (context != null && context.getExecutionListener() != null) {
+            context.getExecutionListener().log(
+                    3,
+                    "EqualSplitOrchestrator primary node type: " +
+                            primaryNodeType
+            );
+        }
     }
 
     public INodeEntry nextNode() {
@@ -54,51 +68,53 @@ public class JdbcOrchestrator implements Orchestrator {
         return currentGroupIndex +1 >= totalGroups && !currentGroupIterator.hasNext();
     }
 
-    private static boolean isBalancer(final INodeEntry node) {
-        return node.getNodename().contains("balancer");
+    private boolean isPrimaryNode(final INodeEntry node) {
+        return node.getNodename().contains(primaryNodeType);
     }
 
-    private static boolean isProxy(final INodeEntry node) {
-        return !isBalancer(node);
+    private boolean isSecondaryNode(final INodeEntry node) {
+        return !isPrimaryNode(node);
     }
 
-    static List<List<INodeEntry>> groupNodes(final Collection<INodeEntry> nodes) {
-        final List<INodeEntry> balancers = nodes.stream()
-                .filter(JdbcOrchestrator::isBalancer)
+    public List<List<INodeEntry>> groupNodes(final Collection<INodeEntry> nodes) {
+        final List<INodeEntry> primaryNodes = nodes.stream()
+                .filter(this::isPrimaryNode)
                 .collect(toList());
 
-        final List<INodeEntry> proxies = nodes.stream()
-                .filter(JdbcOrchestrator::isProxy)
+        final List<INodeEntry> secondaryNodes = nodes.stream()
+                .filter(this::isSecondaryNode)
                 .collect(toList());
 
         final List<List<INodeEntry>> groups = new ArrayList<>();
-        final List<Integer> backendGroupIndexes = computeBackendGroupIndexes(balancers.size(), proxies.size());
+        final List<Integer> secondaryGroupIndexes = computeSecondaryNodeSplitting(primaryNodes.size(),
+                secondaryNodes.size());
 
-        for (int i = 0; i < balancers.size(); i++) {
-            final List<INodeEntry> group = new ArrayList<>(Collections.singletonList(balancers.get(i)));
-            group.addAll(proxies.subList(backendGroupIndexes.get(i), backendGroupIndexes.get(i+1)));
+        for (int i = 0; i < primaryNodes.size(); i++) {
+            final List<INodeEntry> group = new ArrayList<>(Collections.singletonList(primaryNodes.get(i)));
+            group.addAll(secondaryNodes.subList(secondaryGroupIndexes.get(i), secondaryGroupIndexes.get(i+1)));
             groups.add(group);
         }
 
+        System.err.println("Resolved groups: " + groups);
         return groups;
     }
 
-    static List<Integer> computeBackendGroupIndexes(final int frontendCount, final int backendCount) {
-        if (backendCount == 1 || frontendCount == 1 || frontendCount > backendCount) {
+    static List<Integer> computeSecondaryNodeSplitting(final int primaryNodeCount, final int secondaryNodeCount) {
+        if (secondaryNodeCount == 1 || primaryNodeCount == 1 || primaryNodeCount > secondaryNodeCount) {
             throw new RuntimeException("Cannot perform a zero downtime release with the given number of nodes");
         }
 
-        final int groupSize = backendCount / frontendCount;
-        final int remainder = backendCount % frontendCount;
+        final int groupSize = secondaryNodeCount / primaryNodeCount;
+        final int remainder = secondaryNodeCount % primaryNodeCount;
         final List<Integer> indexes = new ArrayList<Integer>() {{
             add(0);
         }};
 
-        for (int i = 1; i <= frontendCount; i++) {
+        for (int i = 1; i <= primaryNodeCount; i++) {
             if (remainder > i-1) {
-                indexes.add(Math.min(indexes.get(i-1) + groupSize + 1, backendCount));
+                indexes.add(min(indexes.get(i-1) + groupSize + 1, secondaryNodeCount));
             } else {
-                indexes.add(Math.min(indexes.get(i-1) + groupSize, backendCount));
+                indexes.add(min(indexes.get(i-1) + groupSize, secondaryNodeCount));
             }
         }
         return indexes;
