@@ -24,11 +24,16 @@ public class EqualSplitOrchestratorPlugin implements OrchestratorPlugin {
             defaultValue = "balancer", required = true)
     String primaryNodeType;
 
+    @PluginProperty(title="single group",
+            description = "Identifier of the primary (frontend) node whose group should be returned",
+            required = false)
+    String onlyGroupFor = null;
+
     public EqualSplitOrchestratorPlugin() {
     }
 
     @Override
     public Orchestrator createOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes) {
-        return new EqualSplitOrchestrator(context, nodes, primaryNodeType);
+        return new EqualSplitOrchestrator(context, nodes, primaryNodeType, onlyGroupFor);
     }
 }

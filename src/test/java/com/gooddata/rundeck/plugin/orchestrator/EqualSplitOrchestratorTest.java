@@ -18,7 +18,6 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class EqualSplitOrchestratorTest {
@@ -27,6 +26,8 @@ public class EqualSplitOrchestratorTest {
     private INodeEntry jbalancer1;
     @Mock
     private INodeEntry jbalancer2;
+    @Mock
+    private INodeEntry jbalancer3;
 
     @Mock
     private INodeEntry proxy1;
@@ -34,6 +35,20 @@ public class EqualSplitOrchestratorTest {
     private INodeEntry proxy2;
     @Mock
     private INodeEntry proxy3;
+    @Mock
+    private INodeEntry proxy4;
+    @Mock
+    private INodeEntry proxy5;
+    @Mock
+    private INodeEntry proxy6;
+    @Mock
+    private INodeEntry proxy7;
+    @Mock
+    private INodeEntry proxy8;
+    @Mock
+    private INodeEntry proxy9;
+    @Mock
+    private INodeEntry proxy10;
 
     @Mock
     private NodeStepResult nodeStepResult;
@@ -46,14 +61,22 @@ public class EqualSplitOrchestratorTest {
 
         when(jbalancer1.getNodename()).thenReturn("jbalancer1");
         when(jbalancer2.getNodename()).thenReturn("jbalancer2");
+        when(jbalancer3.getNodename()).thenReturn("jbalancer3");
 
         when(proxy1.getNodename()).thenReturn("proxy1");
         when(proxy2.getNodename()).thenReturn("proxy2");
         when(proxy3.getNodename()).thenReturn("proxy3");
+        when(proxy4.getNodename()).thenReturn("proxy4");
+        when(proxy5.getNodename()).thenReturn("proxy5");
+        when(proxy6.getNodename()).thenReturn("proxy6");
+        when(proxy7.getNodename()).thenReturn("proxy7");
+        when(proxy8.getNodename()).thenReturn("proxy8");
+        when(proxy9.getNodename()).thenReturn("proxy9");
+        when(proxy10.getNodename()).thenReturn("proxy10");
 
         final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3));
 
-        orchestrator = new EqualSplitOrchestrator(null, nodes, "balancer");
+        orchestrator = new EqualSplitOrchestrator(null, nodes, "balancer", null);
     }
 
     @Test
@@ -79,24 +102,6 @@ public class EqualSplitOrchestratorTest {
 
     @Test
     public void groupNodes() {
-        final INodeEntry proxy4 = mock(INodeEntry.class);
-        final INodeEntry proxy5 = mock(INodeEntry.class);
-        final INodeEntry proxy6 = mock(INodeEntry.class);
-        final INodeEntry proxy7 = mock(INodeEntry.class);
-        final INodeEntry proxy8 = mock(INodeEntry.class);
-        final INodeEntry proxy9 = mock(INodeEntry.class);
-        final INodeEntry proxy10 = mock(INodeEntry.class);
-        final INodeEntry jbalancer3 = mock(INodeEntry.class);
-
-        when(jbalancer3.getNodename()).thenReturn("jbalancer3");
-        when(proxy4.getNodename()).thenReturn("proxy4");
-        when(proxy5.getNodename()).thenReturn("proxy5");
-        when(proxy6.getNodename()).thenReturn("proxy6");
-        when(proxy7.getNodename()).thenReturn("proxy7");
-        when(proxy8.getNodename()).thenReturn("proxy8");
-        when(proxy9.getNodename()).thenReturn("proxy9");
-        when(proxy10.getNodename()).thenReturn("proxy10");
-
         final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3, jbalancer3,
                 proxy4, proxy5, proxy6, proxy7, proxy8, proxy9, proxy10));
         final List<List<INodeEntry>> nodeGroups = orchestrator.groupNodes(nodes);
@@ -113,6 +118,31 @@ public class EqualSplitOrchestratorTest {
         assertThat(firstGroup, equalTo(asList(jbalancer1, proxy1, proxy2, proxy3, proxy4)));
         assertThat(secondGroup, equalTo(asList(jbalancer2, proxy5, proxy6, proxy7)));
         assertThat(thirdGroup, equalTo(asList(jbalancer3, proxy8, proxy9, proxy10)));
+    }
+
+    @Test
+    public void groupNodes_singleGroup() {
+        final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3, jbalancer3,
+                proxy4, proxy5, proxy6, proxy7, proxy8, proxy9, proxy10));
+        final EqualSplitOrchestrator orchestrator = new EqualSplitOrchestrator(null, nodes, "balancer",
+                "jbalancer2");
+
+        final List<List<INodeEntry>> nodeGroups = orchestrator.groupNodes(nodes);
+        assertThat(nodeGroups.size(), is(1));
+        assertThat(nodeGroups.get(0).size(), is(4));
+        assertThat(nodeGroups.get(0), equalTo(asList(jbalancer2, proxy5, proxy6, proxy7)));
+    }
+
+    @Test
+    public void groupNodes_singleGroupNotMatched() {
+        final List<INodeEntry> nodes = new ArrayList<>(asList(jbalancer1, jbalancer2, proxy1, proxy2, proxy3, jbalancer3,
+                proxy4, proxy5, proxy6, proxy7, proxy8, proxy9, proxy10));
+        final EqualSplitOrchestrator orchestrator = new EqualSplitOrchestrator(null, nodes, "balancer",
+                "non_existing_balancer");
+
+        final List<List<INodeEntry>> nodeGroups = orchestrator.groupNodes(nodes);
+        assertThat(nodeGroups.size(), is(1));
+        assertThat(nodeGroups.get(0).isEmpty(), is(true));
     }
 
     @Test
@@ -135,8 +165,6 @@ public class EqualSplitOrchestratorTest {
 
         assertThat(indexes, equalTo(asList(0, 4, 8, 11)));
     }
-
-
 
     private List<INodeEntry> getNextGroup() {
         final List<INodeEntry> nodes = new ArrayList<>();

@@ -23,14 +23,17 @@ import static java.util.stream.Collectors.toList;
 public class EqualSplitOrchestrator implements Orchestrator {
     private final List<List<INodeEntry>> groups;
     private final String primaryNodeType;
+    private final String onlyGroupFor;
     private final int totalGroups;
     private int currentGroupIndex = 0;
     private Iterator<INodeEntry> currentGroupIterator;
     private List<INodeEntry> nodesBeingProcessed;
 
     public EqualSplitOrchestrator(final StepExecutionContext context, final Collection<INodeEntry> nodes,
-                                  final String primaryNodeType) {
+                                  final String primaryNodeType, final String onlyGroupFor) {
         this.primaryNodeType = primaryNodeType;
+        this.onlyGroupFor = onlyGroupFor;
+        System.err.println("onlyGroupFor: " + onlyGroupFor);
         groups = groupNodes(nodes);
         totalGroups = groups.size();
         currentGroupIterator = groups.get(0).iterator();
@@ -86,23 +89,37 @@ public class EqualSplitOrchestrator implements Orchestrator {
                 .collect(toList());
 
         final List<List<INodeEntry>> groups = new ArrayList<>();
+
+        if (primaryNodes.isEmpty()) {
+            System.err.println("No nodes matched by the orchestrator!");
+            groups.add(new ArrayList<>());
+            return groups;
+        }
+
         final List<Integer> secondaryGroupIndexes = computeSecondaryNodeSplitting(primaryNodes.size(),
                 secondaryNodes.size());
 
         for (int i = 0; i < primaryNodes.size(); i++) {
             final List<INodeEntry> group = new ArrayList<>(Collections.singletonList(primaryNodes.get(i)));
-            group.addAll(secondaryNodes.subList(secondaryGroupIndexes.get(i), secondaryGroupIndexes.get(i+1)));
-            groups.add(group);
+            group.addAll(secondaryNodes.subList(secondaryGroupIndexes.get(i), secondaryGroupIndexes.get(i + 1)));
+            if (onlyGroupFor == null || "".equals(onlyGroupFor.trim()) ||
+                    primaryNodes.get(i).getNodename().equals(onlyGroupFor)) {
+                groups.add(group);
+            }
         }
 
-        System.err.println("Resolved groups: " + groups);
+        if (groups.isEmpty()) {
+            System.err.println("No nodes matched by the orchestrator!");
+            groups.add(new ArrayList<>());
+        }
         return groups;
     }
 
     static List<Integer> computeSecondaryNodeSplitting(final int primaryNodeCount, final int secondaryNodeCount) {
-        if (secondaryNodeCount == 1 || primaryNodeCount == 1 || primaryNodeCount > secondaryNodeCount) {
-            throw new RuntimeException("Cannot perform a zero downtime release with the given number of nodes");
-        }
+        // TODO remove?
+//        if (secondaryNodeCount == 1 || primaryNodeCount == 1 || primaryNodeCount > secondaryNodeCount) {
+//            throw new RuntimeException("Cannot perform a zero downtime release with the given number of nodes");
+//        }
 
         final int groupSize = secondaryNodeCount / primaryNodeCount;
         final int remainder = secondaryNodeCount % primaryNodeCount;
